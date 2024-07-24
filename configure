@@ -302,6 +302,9 @@ case "$cpu" in
   "Power Macintosh"|ppc|ppc64)
     cpu="ppc"
   ;;
+  loongarch64)
+    cpu="loongarch64"
+  ;;
   mips)
     cpu="mips"
   ;;

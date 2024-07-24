@@ -145,11 +145,13 @@ extern long double strtold (const char *__nptr, char **__endptr);
 /* #define TCC_TARGET_ARM64  *//* ARMv8 code generator */
 /* #define TCC_TARGET_C67    *//* TMS320C67xx code generator */
 /* #define TCC_TARGET_RISCV64 *//* risc-v code generator */
+/* #define TCC_TARGET_LOONGARCH64 *//* LoongArch64 code generator */
 
 /* default target is I386 */
 #if !defined(TCC_TARGET_I386) && !defined(TCC_TARGET_ARM) && \
     !defined(TCC_TARGET_ARM64) && !defined(TCC_TARGET_C67) && \
-    !defined(TCC_TARGET_X86_64) && !defined(TCC_TARGET_RISCV64)
+    !defined(TCC_TARGET_X86_64) && !defined(TCC_TARGET_RISCV64) && \
+    !defined(TCC_TARGET_LOONGARCH64)
 # if defined __x86_64__
 #  define TCC_TARGET_X86_64
 # elif defined __arm__
@@ -161,6 +163,8 @@ extern long double strtold (const char *__nptr, char **__endptr);
 #  define TCC_TARGET_ARM64
 # elif defined __riscv
 #  define TCC_TARGET_RISCV64
+# elif defined __loongarch64
+#  define TCC_TARGET_LOONGARCH64
 # else
 #  define TCC_TARGET_I386
 # endif
@@ -322,6 +326,12 @@ extern long double strtold (const char *__nptr, char **__endptr);
 #  endif
 # elif defined(TCC_TARGET_RISCV64)
 #  define CONFIG_TCC_ELFINTERP "/lib/ld-linux-riscv64-lp64d.so.1"
+# elif defined(TCC_TARGET_LOONGARCH64)
+#  if defined(TCC_MUSL)
+#    define CONFIG_TCC_ELFINTERP "/lib/ld-musl-loongarch64.so.1"
+#  else
+#    define CONFIG_TCC_ELFINTERP "/lib/ld-linux-loongarch-lp64d.so.1"
+#  endif
 # elif !defined(TCC_ARM_EABI)
 #  if defined(TCC_MUSL)
 #   if defined(TCC_TARGET_I386)
@@ -420,6 +430,10 @@ extern long double strtold (const char *__nptr, char **__endptr);
 # include "riscv64-gen.c"
 # include "riscv64-link.c"
 # include "riscv64-asm.c"
+#elif defined(TCC_TARGET_LOONGARCH64)
+# include "loongarch64-gen.c"
+# include "loongarch64-link.c"
+# include "loongarch64-asm.c"
 #else
 #error unknown target
 #endif
@@ -1721,6 +1735,16 @@ ST_FUNC void gen_increment_tcov (SValue *sv);
 
 /* ------------ riscv64-gen.c ------------ */
 #ifdef TCC_TARGET_RISCV64
+ST_FUNC void gen_opl(int op);
+//ST_FUNC void gfunc_return(CType *func_type);
+ST_FUNC void gen_va_start(void);
+ST_FUNC void arch_transfer_ret_regs(int);
+ST_FUNC void gen_cvt_sxtw(void);
+ST_FUNC void gen_increment_tcov (SValue *sv);
+#endif
+
+/* ------------ loongarch64-gen.c ------------ */
+#ifdef TCC_TARGET_LOONGARCH64
 ST_FUNC void gen_opl(int op);
 //ST_FUNC void gfunc_return(CType *func_type);
 ST_FUNC void gen_va_start(void);
