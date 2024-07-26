@@ -44,6 +44,19 @@ ST_FUNC int code_reloc(int reloc_type)
 ST_FUNC int gotplt_entry_type(int reloc_type)
 {
 	switch (reloc_type) {
+	case R_LARCH_ADD32:
+	case R_LARCH_SUB32:
+	case R_LARCH_PCALA_HI20:
+	case R_LARCH_PCALA_LO12:
+	case R_LARCH_PCALA64_LO20:
+	case R_LARCH_PCALA64_HI12:
+	case R_LARCH_32_PCREL:
+	case R_LARCH_RELAX:
+	case R_LARCH_ALIGN:
+	case R_LARCH_ADD6:
+	case R_LARCH_SUB6:
+		return NO_GOTPLT_ENTRY;
+
 	case R_LARCH_GOT_PC_HI20:
 	case R_LARCH_GOT_PC_LO12:
 		return BUILD_GOT_ONLY;
@@ -69,6 +82,12 @@ ST_FUNC unsigned create_plt_entry(TCCState *s1, unsigned got_offset,
 	write64le(p, got_offset);
 	return plt_offset;
 }
+
+#define check_hi20_truncate(off, addr, pc) \
+	if ((off + ((uint32_t)1 << 20)) >> 21)				\
+		tcc_error_noabort("PLT entry truncated (off = 0x%lx, "	\
+				  "addr = 0x%lx at 0x%lx)",		\
+				  (long)off, (long)addr, (long)pc);
 
 /* relocate the PLT: compute addresses and offsets in the PLT now that final
    address for PLT and GOT are known (see fill_program_header) */
@@ -99,24 +118,56 @@ ST_FUNC void relocate_plt(TCCState *s1)
 		uint64_t got = s1->got->sh_addr;
 		uint64_t hioff = (got - plt + 0x800) >> 12;
 		uint64_t looff = (got - plt) & 0xfff;
-		if ((hioff + (1 << 20)) >> 21)
-			tcc_error_noabort("cannot relocate PLT: overlow: "
-					  "off=0x%lx, got=0x%lx, plt=0x%lx",
-					  (long)hioff, (long)got, (long)plt);
-		write32le(p, 0x1c0000e | (hioff << 5));
-		write32le(p, 0x0011bdad);
-		write32le(p, 0x28c00000 | (0xf << 0) | (0xe << 5) |
-			     (looff << 10));
-		write32le(p, 0x02c00000 | (0xd << 0) | (0xd << 5) |
-			     (-32 - 12));
-		write32le(p, 0x02c00000 | (0xc << 0) | (0xe << 5) |
-			     (looff << 10));
-		write32le(p, 0x00450000 | (0xd << 0) | (0xd << 5) |
-			     (2 << 10));
-		write32le(p, 0x28c00000 | (0xc << 0) | (0xc << 5) |
-			     (8 << 10));
-		write32le(p, 0x4c000000 | (0x0 << 0) | (0xf << 5) |
-			     (0 << 10));
+
+		fprintf(stderr, "hioff: 0x%lx, looff: 0x%lx", hioff, looff);
+
+		check_hi20_truncate(hioff, got, plt);
+
+		write32le(p, 0x1c00000e | (hioff << 5));
+		write32le(p + 4, 0x0011bdad);
+		write32le(p + 8, 0x28c00000 | (0xf << 0) | (0xe << 5) |
+				 (looff << 10));
+		write32le(p + 12, 0x02c00000 | (0xd << 0) | (0xd << 5) |
+				  ((-32 - 12) & 0xfff) << 10);
+		write32le(p + 16, 0x02c00000 | (0xc << 0) | (0xe << 5) |
+				  (looff << 10));
+		write32le(p + 20, 0x00450000 | (0xd << 0) | (0xd << 5) |
+				  (2 << 10));
+		write32le(p + 24, 0x28c00000 | (0xc << 0) | (0xc << 5) |
+				  (8 << 10));
+		write32le(p + 28, 0x4c000000 | (0x0 << 0) | (0xf << 5) |
+				  (0 << 10));
+		p += 32;
+
+		while (p < p_end) {
+			uint64_t pc = plt + (p - s1->plt->data);
+			uint64_t addr = got + read64le(p);
+			uint64_t hioff = (addr - pc + 0x800) >> 12;
+
+			check_hi20_truncate(hioff, addr, pc);
+
+			/*
+				pcaddu12i	$t3, pcrel_hi20(func@got)
+				ld.d		$t3, t3, pcrel_lo12(func@got)
+				jirl		$t1, $t3, 0
+				(nop)andi	$zero, $zero, 0
+			 */
+			write32le(p, 0x1c00000f | (hioff << 5));
+			write32le(p + 4, 0x28c00000 | (0xf << 0) | (0xf << 5) |
+					 (looff << 10));
+			write32le(p + 8, 0x4c000000 | (0xc << 0) | (0xf << 5) |
+				  (0 << 10));
+			write32le(p + 12, 0x3400000 | (0x0 << 0) | (0x0 << 5) |
+				  (0 << 10));
+			p += 16;
+		}
+	}
+
+	if (s1->plt->reloc) {
+		ElfW_Rel *rel;
+		p = s1->got->data;
+		for_each_elem(s1->plt->reloc, 0, rel, ElfW_Rel)
+			write64le(p + rel->r_offset, s1->plt->sh_addr);
 	}
 }
 

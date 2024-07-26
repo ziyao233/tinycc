@@ -3312,6 +3312,8 @@ invalid:
 #elif defined TCC_TARGET_RISCV64
                     && type != R_RISCV_ALIGN
                     && type != R_RISCV_RELAX
+#elif defined TCC_TARGET_LOONGARCH64
+		    && type != R_LARCH_RELAX
 #endif
                    ) {
                 invalid_reloc:
