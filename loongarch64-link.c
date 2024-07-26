@@ -27,7 +27,14 @@
    relocations, returns -1. */
 ST_FUNC int code_reloc(int reloc_type)
 {
-	tcc_error("%s: todo", __func__);
+	switch (reloc_type) {
+	case R_LARCH_B26:
+		return 1;
+
+	case R_LARCH_GOT_PC_HI20:
+	case R_LARCH_GOT_PC_LO12:
+		return 0;
+	}
 	return -1;
 }
 
@@ -36,28 +43,90 @@ ST_FUNC int code_reloc(int reloc_type)
    different values. */
 ST_FUNC int gotplt_entry_type(int reloc_type)
 {
-	tcc_error("%s: todo", __func__);
+	switch (reloc_type) {
+	case R_LARCH_GOT_PC_HI20:
+	case R_LARCH_GOT_PC_LO12:
+		return BUILD_GOT_ONLY;
+
+	case R_LARCH_B26:
+		return AUTO_GOTPLT_ENTRY;
+	}
 	return -1;
 }
 
 ST_FUNC unsigned create_plt_entry(TCCState *s1, unsigned got_offset,
 				  struct sym_attr *attr)
 {
-	tcc_error("%s: todo", __func__);
-	return 0;
+	Section *plt = s1->plt;
+	uint8_t *p;
+	unsigned plt_offset;
+
+	if (plt->data_offset == 0)
+		section_ptr_add(plt, 32);
+	plt_offset = plt->data_offset;
+
+	p = section_ptr_add(plt, 16);
+	write64le(p, got_offset);
+	return plt_offset;
 }
 
 /* relocate the PLT: compute addresses and offsets in the PLT now that final
    address for PLT and GOT are known (see fill_program_header) */
 ST_FUNC void relocate_plt(TCCState *s1)
 {
-	tcc_error("%s: todo", __func__);
+	uint8_t *p, *p_end;
+
+	if (!s1->plt)
+		return;
+
+	p = s1->plt->data;
+	p_end = p + s1->plt->data_offset;
+
+/*
+	pcaddu12i $t2, %pcrel_hi20(.got.plt)
+	sub.[wd]  $t1, $t1, $t3
+	ld.[wd]   $t3, $t2, %pcrel_lo12(.got.plt)  ; t3 = _dl_runtime_resolve
+	addi.[wd] $t1, $t1, -pltHeaderSize-12      ; t1 = &.plt[i] - &.plt[0]
+	addi.[wd] $t0, $t2, %pcrel_lo12(.got.plt)
+	srli.[wd] $t1, $t1, (is64?1:2)             ; t1 = &.got.plt[i] -
+						     &.got.plt[0]
+	ld.[wd]   $t0, $t0, Wordsize               ; t0 = link_map
+	jr        $t3
+*/
+
+	if (p < p_end) {
+		uint64_t plt = s1->plt->sh_addr;
+		uint64_t got = s1->got->sh_addr;
+		uint64_t hioff = (got - plt + 0x800) >> 12;
+		uint64_t looff = (got - plt) & 0xfff;
+		if ((hioff + (1 << 20)) >> 21)
+			tcc_error_noabort("cannot relocate PLT: overlow: "
+					  "off=0x%lx, got=0x%lx, plt=0x%lx",
+					  (long)hioff, (long)got, (long)plt);
+		write32le(p, 0x1c0000e | (hioff << 5));
+		write32le(p, 0x0011bdad);
+		write32le(p, 0x28c00000 | (0xf << 0) | (0xe << 5) |
+			     (looff << 10));
+		write32le(p, 0x02c00000 | (0xd << 0) | (0xd << 5) |
+			     (-32 - 12));
+		write32le(p, 0x02c00000 | (0xc << 0) | (0xe << 5) |
+			     (looff << 10));
+		write32le(p, 0x00450000 | (0xd << 0) | (0xd << 5) |
+			     (2 << 10));
+		write32le(p, 0x28c00000 | (0xc << 0) | (0xc << 5) |
+			     (8 << 10));
+		write32le(p, 0x4c000000 | (0x0 << 0) | (0xf << 5) |
+			     (0 << 10));
+	}
 }
 
 ST_FUNC void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr,
 		      addr_t addr, addr_t val)
 {
-	tcc_error("%s: todo", __func__);
+	switch (type) {
+	default:
+		fprintf(stderr, "FIXME: unhandled reloc type %d\n", type);
+	}
 }
 
 #endif
