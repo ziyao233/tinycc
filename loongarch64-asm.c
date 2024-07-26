@@ -70,6 +70,19 @@ ST_FUNC void asm_compute_constraints(ASMOperand *operands,
 	tcc_error("%s: not implemented", __func__);
 }
 
+ST_FUNC void subst_asm_operand(CString *add_str, SValue *sv, int modifier)
+{
+	tcc_error("%s: todo", __func__);
+}
+
+ST_FUNC void asm_gen_code(ASMOperand *operands, int nb_operands,
+			  int nb_outputs, int is_output,
+			  uint8_t *clobber_regs,
+			  int out_reg)
+{
+	tcc_error("%s: todo", __func__);
+}
+
 ST_FUNC void asm_clobber(uint8_t *clobber_regs, const char *str)
 {
 	tcc_error("%s: not implemented", __func__);
@@ -79,5 +92,6 @@ ST_FUNC int asm_parse_regvar(int t)
 {
 	tcc_error("%s: not implemented", __func__);
 }
+
 
 #endif /* ndef TARGETS_DEFS_ONLY */

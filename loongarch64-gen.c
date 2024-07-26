@@ -56,6 +56,12 @@ ST_DATA const int reg_classes[NB_REGS] = {
   RC_FLOAT | RC_F(7)
 };
 
+#if defined (CONFIG_TCC_BCHECK)
+static addr_t func_bound_offset;
+static unsigned long func_bound_ind;
+ST_DATA int func_bound_add_epilog;
+#endif
+
 // Patch all branches in list pointed to by t to branch to a:
 ST_FUNC void gsym_addr(int t_, int a_)
 {
