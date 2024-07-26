@@ -44,12 +44,14 @@ ST_FUNC int code_reloc(int reloc_type)
 ST_FUNC int gotplt_entry_type(int reloc_type)
 {
 	switch (reloc_type) {
+	case R_LARCH_32:
+	case R_LARCH_64:
+	case R_LARCH_ADD16:
 	case R_LARCH_ADD32:
+	case R_LARCH_ADD64:
+	case R_LARCH_SUB16:
 	case R_LARCH_SUB32:
-	case R_LARCH_PCALA_HI20:
-	case R_LARCH_PCALA_LO12:
-	case R_LARCH_PCALA64_LO20:
-	case R_LARCH_PCALA64_HI12:
+	case R_LARCH_SUB64:
 	case R_LARCH_32_PCREL:
 	case R_LARCH_RELAX:
 	case R_LARCH_ALIGN:
@@ -62,6 +64,10 @@ ST_FUNC int gotplt_entry_type(int reloc_type)
 		return BUILD_GOT_ONLY;
 
 	case R_LARCH_B26:
+	case R_LARCH_PCALA_HI20:
+	case R_LARCH_PCALA_LO12:
+	case R_LARCH_PCALA64_LO20:
+	case R_LARCH_PCALA64_HI12:
 		return AUTO_GOTPLT_ENTRY;
 	}
 	return -1;
@@ -119,8 +125,6 @@ ST_FUNC void relocate_plt(TCCState *s1)
 		uint64_t hioff = (got - plt + 0x800) >> 12;
 		uint64_t looff = (got - plt) & 0xfff;
 
-		fprintf(stderr, "hioff: 0x%lx, looff: 0x%lx", hioff, looff);
-
 		check_hi20_truncate(hioff, got, plt);
 
 		write32le(p, 0x1c00000e | (hioff << 5));
@@ -143,6 +147,7 @@ ST_FUNC void relocate_plt(TCCState *s1)
 			uint64_t pc = plt + (p - s1->plt->data);
 			uint64_t addr = got + read64le(p);
 			uint64_t hioff = (addr - pc + 0x800) >> 12;
+			uint64_t looff = (addr - pc) & 0xfff;
 
 			check_hi20_truncate(hioff, addr, pc);
 
@@ -174,7 +179,77 @@ ST_FUNC void relocate_plt(TCCState *s1)
 ST_FUNC void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr,
 		      addr_t addr, addr_t val)
 {
+	uint64_t off64;
+	uint32_t off32;
+	uint32_t tmp;
+	int sym_idx = ELFW(R_SYM)(rel->r_info);
+	ElfW(Sym) *sym = &((ElfW(Sym) *)symtab_section->data)[sym_idx];
+
 	switch (type) {
+	case R_LARCH_32:
+		write32le(ptr, val);
+		return;
+	case R_LARCH_64:
+		write64le(ptr, val);
+		return;
+	case R_LARCH_ADD16:
+		write16le(ptr, read16le(ptr) + val);
+		return;
+	case R_LARCH_ADD32:
+		write32le(ptr, read32le(ptr) + val);
+		return;
+	case R_LARCH_ADD64:
+		write64le(ptr, read64le(ptr) + val);
+		return;
+	case R_LARCH_SUB16:
+		write16le(ptr, read16le(ptr) - val);
+		return;
+	case R_LARCH_SUB32:
+		write32le(ptr, read32le(ptr) - val);
+		return;
+	case R_LARCH_SUB64:
+		write64le(ptr, read64le(ptr) - val);
+		return;
+	case R_LARCH_B26:
+		off64 = val - addr;
+		// TODO: check overflow and alignment
+		write32le(ptr, read32le(ptr) 		|
+			       ((off64 >> 18) & 0x7ff)	|
+			       ((off64 & 0x7fffc) << 8));
+		return;
+	case R_LARCH_PCALA_HI20:
+		off32 = ((val + 0x800) & ~0xfff) - (addr & ~0xfff);
+		write32le(ptr, read32le(ptr) | ((off32 >> 12) << 5));
+		return;
+	case R_LARCH_PCALA_LO12:
+		write32le(ptr, read32le(ptr) | ((val & 0x7ff) << 10));
+		return;
+	case R_LARCH_PCALA64_LO20:
+		off64 = val + 0x80000000;
+		off64 += val & 0x800 ? (0x1000 - 0x100000000) : 0;
+		off64 -= (addr - 8) & ~0xfff;
+		write32le(ptr, read32le(ptr) |
+			       (((off64 >> 32) & 0xfffff) << 5));
+		return;
+	case R_LARCH_PCALA64_HI12:
+		off64 = val + 0x80000000;
+		off64 += val & 0x800 ? (0x1000 - 0x100000000) : 0;
+		off64 -= (addr - 12) & ~0xfff;
+		write32le(ptr, read32le(ptr) |
+			       ((off64 >> 52) << 10));
+		return;
+	case R_LARCH_32_PCREL:
+		write32le(ptr, val - addr);
+		return;
+	case R_LARCH_RELAX:
+	case R_LARCH_ALIGN:	// TODO: REALLY DO THE ALIGNMENT
+		return;
+	case R_LARCH_ADD6:
+		*ptr += val & 0x3f;
+		return;
+	case R_LARCH_SUB6:
+		*ptr -= val & 0x3f;
+		return;
 	default:
 		fprintf(stderr, "FIXME: unhandled reloc type %d\n", type);
 	}
