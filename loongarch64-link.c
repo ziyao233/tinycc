@@ -19,7 +19,6 @@
 
 #else /* !TARGET_DEFS_ONLY */
 
-//#define DEBUG_RELOC
 #define USING_GLOBALS
 #include "tcc.h"
 
@@ -28,6 +27,7 @@
 ST_FUNC int code_reloc(int reloc_type)
 {
 	switch (reloc_type) {
+	case R_LARCH_B16:
 	case R_LARCH_B26:
 		return 1;
 
@@ -46,9 +46,11 @@ ST_FUNC int gotplt_entry_type(int reloc_type)
 	switch (reloc_type) {
 	case R_LARCH_32:
 	case R_LARCH_64:
+	case R_LARCH_ADD8:
 	case R_LARCH_ADD16:
 	case R_LARCH_ADD32:
 	case R_LARCH_ADD64:
+	case R_LARCH_SUB8:
 	case R_LARCH_SUB16:
 	case R_LARCH_SUB32:
 	case R_LARCH_SUB64:
@@ -59,16 +61,17 @@ ST_FUNC int gotplt_entry_type(int reloc_type)
 	case R_LARCH_SUB6:
 		return NO_GOTPLT_ENTRY;
 
-	case R_LARCH_GOT_PC_HI20:
-	case R_LARCH_GOT_PC_LO12:
-		return BUILD_GOT_ONLY;
-
+	case R_LARCH_B16:
 	case R_LARCH_B26:
 	case R_LARCH_PCALA_HI20:
 	case R_LARCH_PCALA_LO12:
 	case R_LARCH_PCALA64_LO20:
 	case R_LARCH_PCALA64_HI12:
 		return AUTO_GOTPLT_ENTRY;
+
+	case R_LARCH_GOT_PC_HI20:
+	case R_LARCH_GOT_PC_LO12:
+		return ALWAYS_GOTPLT_ENTRY;
 	}
 	return -1;
 }
@@ -181,7 +184,6 @@ ST_FUNC void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr,
 {
 	uint64_t off64;
 	uint32_t off32;
-	uint32_t tmp;
 	int sym_idx = ELFW(R_SYM)(rel->r_info);
 	ElfW(Sym) *sym = &((ElfW(Sym) *)symtab_section->data)[sym_idx];
 
@@ -192,6 +194,11 @@ ST_FUNC void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr,
 	case R_LARCH_64:
 		write64le(ptr, val);
 		return;
+	case R_LARCH_COPY:
+		// TODO: implement me
+		return;
+	case R_LARCH_ADD8:
+		*ptr += val;
 	case R_LARCH_ADD16:
 		write16le(ptr, read16le(ptr) + val);
 		return;
@@ -201,6 +208,9 @@ ST_FUNC void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr,
 	case R_LARCH_ADD64:
 		write64le(ptr, read64le(ptr) + val);
 		return;
+	case R_LARCH_SUB8:
+		*ptr -= val;
+		return;
 	case R_LARCH_SUB16:
 		write16le(ptr, read16le(ptr) - val);
 		return;
@@ -209,6 +219,12 @@ ST_FUNC void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr,
 		return;
 	case R_LARCH_SUB64:
 		write64le(ptr, read64le(ptr) - val);
+		return;
+	case R_LARCH_B16:
+		off64 = val - addr;
+		// TODO: check overflow and alignment
+		write32le(ptr, read32le(ptr) |
+			       (((off64 >> 2) & 0xffff) << 10));
 		return;
 	case R_LARCH_B26:
 		off64 = val - addr;
@@ -237,6 +253,18 @@ ST_FUNC void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr,
 		off64 -= (addr - 12) & ~0xfff;
 		write32le(ptr, read32le(ptr) |
 			       ((off64 >> 52) << 10));
+		return;
+	case R_LARCH_GOT_PC_HI20:
+		val = s1->got->sh_addr;
+		val += get_sym_attr(s1, sym_idx, 0)->got_offset;
+		off64 = (val - addr + ((val & 0x800) << 1)) >> 12;
+		write32le(ptr, read32le(ptr) |
+			       ((off64 & 0xfffff) << 5));
+		return;
+	case R_LARCH_GOT_PC_LO12:
+		val = s1->got->sh_addr;
+		val += get_sym_attr(s1, sym_idx, 0)->got_offset;
+		write32le(ptr, read32le(ptr) | ((val & 0xfff) << 10));
 		return;
 	case R_LARCH_32_PCREL:
 		write32le(ptr, val - addr);

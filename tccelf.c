@@ -1170,7 +1170,7 @@ static int prepare_dynamic_rel(TCCState *s1, Section *sr)
     int count = 0;
 #if defined(TCC_TARGET_I386) || defined(TCC_TARGET_X86_64) || \
     defined(TCC_TARGET_ARM) || defined(TCC_TARGET_ARM64) || \
-    defined(TCC_TARGET_RISCV64)
+    defined(TCC_TARGET_RISCV64) || defined(TCC_TARGET_LOONGARCH64)
     ElfW_Rel *rel;
     for_each_elem(sr, 0, rel, ElfW_Rel) {
         int sym_index = ELFW(R_SYM)(rel->r_info);
@@ -1197,6 +1197,9 @@ static int prepare_dynamic_rel(TCCState *s1, Section *sr)
 #elif defined(TCC_TARGET_RISCV64)
         case R_RISCV_32:
         case R_RISCV_64:
+#elif defined(TCC_TARGET_LOONGARCH64)
+	case R_LARCH_32:
+	case R_LARCH_64:
 #endif
             count++;
             break;
